@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resonance Archive · Admin</title>
+<style>
+:root{color-scheme:dark;--bg:#10131b;--panel:#191f2b;--line:#30394a;--text:#eef2f8;--muted:#a7b2c5;--accent:#a6e3d0;--danger:#ffb4b4}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#253448 0,transparent 40%),var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1080px;margin:auto;padding:24px 16px 60px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:clamp(24px,4vw,36px);margin:0}.muted{color:var(--muted)}.panel{background:#191f2bee;border:1px solid var(--line);border-radius:16px;padding:18px;margin:18px 0}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}input,select,textarea{width:100%;background:#0f141d;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:11px;font:inherit}
+textarea{min-height:80px;resize:vertical}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+button,.button{border:1px solid var(--line);background:#263143;color:var(--text);border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit;text-decoration:none;display:inline-block}
+button.primary{background:var(--accent);color:#10211e;border-color:transparent;font-weight:700}button.danger{color:var(--danger)}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.record{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding:12px 0}.record:last-child{border:0}.notice{border-left:3px solid var(--accent);padding:10px 12px;background:#202d32;border-radius:8px;color:#d7eee8}.error{color:var(--danger)}.hidden{display:none!important}
+</style>
+</head>
+<body><main>
+<div class="top"><div><h1>Resonance Archive</h1><div class="muted">Admin panel · Character records</div></div><a class="button" href="/">← Public site</a></div>
+<div class="panel">
+<h2 style="margin-top:0">Admin access</h2>
+<p class="muted">The admin key stays in this page's memory only and is not saved to local storage. Use HTTPS on a deployed site.</p>
+<label for="apiKey">Admin API key</label><input id="apiKey" type="password" autocomplete="current-password" placeholder="Paste ADMIN_API_KEY">
+<div class="row" style="margin-top:12px"><button class="primary" id="login">Connect</button><button id="logout">Disconnect</button><span id="status" role="status" class="muted"></span></div>
+</div>
+<div id="app" class="hidden">
+<div class="panel">
+<div class="top"><h2 id="formTitle" style="margin:0">Add character</h2><button id="new">New record</button></div>
+<form id="characterForm">
+<input id="id" type="hidden">
+<div class="grid">
+<div><label for="name">Official name (do not translate)</label><input id="name" required maxlength="160"></div>
+<div><label for="element">Element</label><select id="element"><option value="">Unknown / not verified</option><option>Aero</option><option>Glacio</option><option>Electro</option><option>Fusion</option><option>Havoc</option><option>Spectro</option></select></div>
+<div><label for="weapon">Weapon type</label><select id="weapon"><option value="">Unknown / not verified</option><option>Sword</option><option>Broadblade</option><option>Pistols</option><option>Gauntlets</option><option>Rectifier</option></select></div>
+<div><label for="rarity">Rarity</label><select id="rarity"><option value="">Unknown / not verified</option><option value="4">4 star</option><option value="5">5 star</option></select></div>
+<div><label for="version">Debut version</label><input id="version" placeholder="e.g. 1.0"></div>
+<div><label for="verification">Verification status</label><select id="verification"><option value="needs_review">Needs review</option><option value="partially_verified">Partially verified</option><option value="verified">Verified</option></select></div>
+</div>
+<div class="grid">
+<div><label for="enName">English display name</label><input id="enName" maxlength="160"></div>
+<div><label for="arName">Arabic display name (keep official name if no established Arabic name)</label><input id="arName" maxlength="160"></div>
+</div>
+<div class="grid">
+<div><label for="enDesc">English description</label><textarea id="enDesc"></textarea></div>
+<div><label for="arDesc">Arabic description</label><textarea id="arDesc" dir="rtl"></textarea></div>
+</div>
+<div class="row" style="margin-top:14px"><button class="primary" type="submit">Save record</button><button type="button" id="cancel">Clear form</button></div>
+</form>
+</div>
+<div class="panel"><div class="top"><h2 style="margin:0">Characters</h2><button id="reload">Reload list</button></div><div id="records" class="muted" style="margin-top:10px">Connect as admin to load records.</div></div>
+</div>
+<div class="panel notice">Verification rule: only set a record to “Verified” after checking its facts against a specific official source and recording that source in the database. This panel edits core fields and bilingual descriptions; skills, materials, stats, and media need their dedicated management controls in a later iteration.</div>
+</main>
+<script>
+const $=id=>document.getElementById(id); let apiKey=""; let records=[];
+function status(s,error=false){$("status").textContent=s;$("status").className=error?"error":"muted"}
+async function request(path,options={}) {
+ const res=await fetch(path,{...options,headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey,...(options.headers||{})}});
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok) throw new Error(data.error||("HTTP "+res.status));
+ return data;
+}
+function formRecord(){
+ const rarity=$("rarity").value;
+ return {id:$("id").value||slug($("name").value),official_name:$("name").value.trim(),
+ element:$("element").value||null,weapon_type:$("weapon").value||null,rarity:rarity?Number(rarity):null,
+ debut_version:$("version").value.trim()||null,verification_status:$("verification").value,playable:true,
+ localizations:{en:{display_name:$("enName").value.trim()||$("name").value.trim(),short_description:$("enDesc").value.trim(),full_description:$("enDesc").value.trim()},
+ ar:{display_name:$("arName").value.trim()||$("name").value.trim(),short_description:$("arDesc").value.trim(),full_description:$("arDesc").value.trim()}}};
+}
+function slug(s){return s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"character-"+Date.now()}
+function fill(c){
+ $("id").value=c.id;$("name").value=c.official_name||"";$("element").value=c.element||"";$("weapon").value=c.weapon_type||"";
+ $("rarity").value=c.rarity||"";$("version").value=c.debut_version||"";$("verification").value=c.verification_status||"needs_review";
+ $("enName").value=c.localizations?.en?.display_name||"";$("arName").value=c.localizations?.ar?.display_name||"";
+ $("enDesc").value=c.localizations?.en?.full_description||c.localizations?.en?.short_description||"";
+ $("arDesc").value=c.localizations?.ar?.full_description||c.localizations?.ar?.short_description||"";
+ $("formTitle").textContent="Edit: "+c.official_name;window.scrollTo({top:0,behavior:"smooth"});
+}
+function clearForm(){$("characterForm").reset();$("id").value="";$("formTitle").textContent="Add character"}
+function render(){
+ $("records").innerHTML=records.length?records.map(c=>`<div class="record"><div><strong>${escapeHtml(c.official_name)}</strong><div class="muted">${escapeHtml(c.element||"Unknown")} · ${escapeHtml(c.weapon_type||"Unknown")} · ${escapeHtml(c.verification_status)}</div></div><div class="row"><button data-edit="${escapeHtml(c.id)}">Edit</button><button class="danger" data-delete="${escapeHtml(c.id)}">Delete</button></div></div>`).join(""):"No records yet. Add the first record above.";
+}
+function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+async function reload(){records=(await request("/api/characters")).characters;render()}
+$("login").onclick=async()=>{apiKey=$("apiKey").value.trim();if(!apiKey){status("Enter the admin key.",true);return}try{await reload();$("app").classList.remove("hidden");status("Connected.")}catch(e){apiKey="";status(e.message,true)}};
+$("logout").onclick=()=>{apiKey="";$("apiKey").value="";$("app").classList.add("hidden");records=[];status("Disconnected.")};
+$("reload").onclick=async()=>{try{await reload();status("List reloaded.")}catch(e){status(e.message,true)}};
+$("new").onclick=clearForm;$("cancel").onclick=clearForm;
+$("records").addEventListener("click",async e=>{const edit=e.target.closest("[data-edit]"),del=e.target.closest("[data-delete]");if(edit){const c=records.find(x=>x.id===edit.dataset.edit);if(c)fill(c)}if(del){const c=records.find(x=>x.id===del.dataset.delete);if(!c||!confirm("Delete "+c.official_name+"? This cannot be undone."))return;try{await request("/api/characters/"+encodeURIComponent(c.id),{method:"DELETE"});await reload();status("Record deleted.")}catch(err){status(err.message,true)}}});
+$("characterForm").onsubmit=async e=>{e.preventDefault();const data=formRecord();try{let saved;if($("id").value){saved=await request("/api/characters/"+encodeURIComponent($("id").value),{method:"PATCH",body:JSON.stringify(data)})}else{saved=await request("/api/characters",{method:"POST",body:JSON.stringify(data)})}await reload();fill(saved);status("Saved.")}catch(err){status(err.message,true)}};
+</script></body></html>

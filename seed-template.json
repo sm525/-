@@ -1,0 +1,28 @@
+{
+  "note": "Template only. Do not import as game data.",
+  "characters": [
+    {
+      "id": "example-character",
+      "official_name": "Exact official name",
+      "element": null,
+      "weapon_type": null,
+      "rarity": null,
+      "debut_version": null,
+      "verification_status": "needs_review",
+      "localizations": {
+        "en": {
+          "display_name": "Exact official name",
+          "short_description": "",
+          "full_description": ""
+        },
+        "ar": {
+          "display_name": "Exact official name",
+          "short_description": "",
+          "full_description": ""
+        }
+      },
+      "source_url": "",
+      "checked_at": ""
+    }
+  ]
+}
